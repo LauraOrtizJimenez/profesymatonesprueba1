@@ -8,7 +8,7 @@ using Proyecto1.Services.Interfaces;
 
 namespace Proyecto1.Services
 {
-     public class GameService : IGameService
+    public class GameService : IGameService
     {
         private readonly IGameRepository _gameRepository;
         private readonly IRoomRepository _roomRepository;
@@ -42,7 +42,6 @@ namespace Proyecto1.Services
             if (room == null)
                 throw new InvalidOperationException("Room not found");
 
-            // ✅ Busca players que están en la room SIN GameId
             var playersInRoom = room.Players
                 .Where(p => p.RoomId == roomId && !p.GameId.HasValue)
                 .ToList();
@@ -60,11 +59,9 @@ namespace Proyecto1.Services
 
             await _gameRepository.CreateAsync(game);
 
-            // Generar tablero
             var board = _boardService.GenerateBoard(game.Id);
             game.Board = board;
 
-            // ✅ AHORA SÍ asigna el GameId a los players
             int turnOrder = 0;
             foreach (var player in playersInRoom)
             {
@@ -76,11 +73,11 @@ namespace Proyecto1.Services
 
             room.Status = RoomStatus.InGame;
             await _roomRepository.UpdateAsync(room);
-
             await _gameRepository.UpdateAsync(game);
 
             return game;
         }
+
         public async Task<GameStateDto> GetGameStateAsync(int gameId)
         {
             var game = await _gameRepository.GetByIdWithDetailsAsync(gameId);
@@ -129,23 +126,14 @@ namespace Proyecto1.Services
         public async Task<MoveResultDto> RollDiceAndMoveAsync(int gameId, int userId)
         {
             var game = await _gameRepository.GetByIdWithDetailsAsync(gameId);
-            if (game == null)
-                throw new InvalidOperationException("Game not found");
-
-            if (game.Status != GameStatus.InProgress)
-                throw new InvalidOperationException("Game is not in progress");
+            if (game == null) throw new InvalidOperationException("Game not found");
+            if (game.Status != GameStatus.InProgress) throw new InvalidOperationException("Game is not in progress");
 
             var player = await _playerRepository.GetByGameAndUserAsync(gameId, userId);
-            if (player == null)
-                throw new InvalidOperationException("Player not in game");
+            if (player == null) throw new InvalidOperationException("Player not in game");
+            if (!_turnService.IsPlayerTurn(game, player.Id)) throw new InvalidOperationException("Not your turn");
+            if (game.CurrentTurnPhase != TurnPhase.WaitingForDice) throw new InvalidOperationException("Dice already rolled");
 
-            if (!_turnService.IsPlayerTurn(game, player.Id))
-                throw new InvalidOperationException("Not your turn");
-
-            if (game.CurrentTurnPhase != TurnPhase.WaitingForDice)
-                throw new InvalidOperationException("Dice already rolled");
-
-            // Tirar dado
             int diceValue = _diceService.RollDice();
             int fromPosition = player.Position;
             int toPosition = Math.Min(fromPosition + diceValue, game.Board.Size);
@@ -158,7 +146,6 @@ namespace Proyecto1.Services
                 IsWinner = false
             };
 
-            // Si se pasa del tamaño del tablero, no se mueve
             if (fromPosition + diceValue > game.Board.Size)
             {
                 result.ToPosition = fromPosition;
@@ -171,23 +158,39 @@ namespace Proyecto1.Services
 
             player.Position = toPosition;
 
-            // Verificar serpientes y escaleras
             var snakeDest = _boardService.GetSnakeDestination(game.Board, toPosition);
             var ladderDest = _boardService.GetLadderDestination(game.Board, toPosition);
 
-            if (snakeDest.HasValue)
+            var boardService = _boardService as BoardService;
+
+            // PROFESORES (serpientes)
+            if (snakeDest.HasValue && boardService != null)
             {
+                var profesorQuestion = boardService.GetProfesorQuestion(toPosition);
+
+                if (profesorQuestion != null)
+                {
+                    result.RequiresProfesorAnswer = true;
+                    result.ProfesorQuestion = profesorQuestion;
+                    result.FinalPosition = toPosition; // espera la respuesta
+                    result.SpecialEvent = "Profesor";
+                    result.Message = $"¡Has caído con el profesor {profesorQuestion.Profesor}!";
+                    await _playerRepository.UpdateAsync(player);
+                    await _gameRepository.UpdateAsync(game);
+                    return result;
+                }
+
                 player.Position = snakeDest.Value;
                 result.FinalPosition = snakeDest.Value;
-                result.SpecialEvent = "Snake";
-                result.Message = $"Hit a snake! Moved from {toPosition} to {snakeDest.Value}";
+                result.SpecialEvent = "Profesor";
+                result.Message = $"Hit a profesor! Moved from {toPosition} to {snakeDest.Value}";
             }
             else if (ladderDest.HasValue)
             {
                 player.Position = ladderDest.Value;
                 result.FinalPosition = ladderDest.Value;
-                result.SpecialEvent = "Ladder";
-                result.Message = $"Climbed a ladder! Moved from {toPosition} to {ladderDest.Value}";
+                result.SpecialEvent = "Matón";
+                result.Message = $"Climbed a matón! Moved from {toPosition} to {ladderDest.Value}";
             }
             else
             {
@@ -195,7 +198,6 @@ namespace Proyecto1.Services
                 result.Message = "Normal move";
             }
 
-            // Verificar victoria
             if (player.Position >= game.Board.Size)
             {
                 player.Status = PlayerStatus.Winner;
@@ -205,7 +207,7 @@ namespace Proyecto1.Services
                 result.IsWinner = true;
                 result.Message = "🎉 You won!";
             }
-            else
+            else if (!result.RequiresProfesorAnswer)
             {
                 _turnService.AdvanceTurn(game);
             }
@@ -216,15 +218,66 @@ namespace Proyecto1.Services
             return result;
         }
 
+        public async Task<ProfesorQuestionDto?> GetProfesorQuestionAsync(int gameId, int userId)
+        {
+            var player = await _playerRepository.GetByGameAndUserAsync(gameId, userId);
+            if (player == null) return null;
+
+            var boardService = _boardService as BoardService;
+            return boardService?.GetProfesorQuestion(player.Position);
+        }
+
+        public async Task<MoveResultDto> AnswerProfesorQuestionAsync(int gameId, int userId, string answer)
+        {
+            var player = await _playerRepository.GetByGameAndUserAsync(gameId, userId);
+            if (player == null) throw new InvalidOperationException("Player not in game");
+
+            var boardService = _boardService as BoardService;
+            if (boardService == null) throw new InvalidOperationException("Board service not available");
+
+            // Cargamos el juego completo para evitar NullReference
+            var game = await _gameRepository.GetByIdWithDetailsAsync(player.GameId.Value);
+            if (game == null) throw new InvalidOperationException("Game not found");
+
+            var result = new MoveResultDto
+            {
+                FromPosition = player.Position,
+                ToPosition = player.Position,
+                FinalPosition = player.Position,
+                IsWinner = false
+            };
+
+            var isCorrect = boardService.ValidateProfesorAnswer(player.Position, answer);
+
+            if (isCorrect)
+            {
+                result.Message = "¡Correcto! No bajas.";
+            }
+            else
+            {
+                var snakeDest = boardService.GetSnakeDestination(game.Board, player.Position);
+                if (snakeDest.HasValue)
+                {
+                    player.Position = snakeDest.Value;
+                    result.FinalPosition = snakeDest.Value;
+                }
+                result.Message = "Incorrecto! Has caído por el profesor.";
+            }
+
+            _turnService.AdvanceTurn(game);
+            await _playerRepository.UpdateAsync(player);
+            await _gameRepository.UpdateAsync(game);
+
+            return result;
+        }
+
         public async Task SurrenderAsync(int gameId, int userId)
         {
             var game = await _gameRepository.GetByIdWithDetailsAsync(gameId);
-            if (game == null)
-                throw new InvalidOperationException("Game not found");
+            if (game == null) throw new InvalidOperationException("Game not found");
 
             var player = await _playerRepository.GetByGameAndUserAsync(gameId, userId);
-            if (player == null)
-                throw new InvalidOperationException("Player not in game");
+            if (player == null) throw new InvalidOperationException("Player not in game");
 
             player.Status = PlayerStatus.Surrendered;
             await _playerRepository.UpdateAsync(player);
@@ -244,3 +297,4 @@ namespace Proyecto1.Services
         }
     }
 }
+

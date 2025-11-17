@@ -26,7 +26,6 @@ builder.Services.AddSwaggerGen(c =>
         Description = "API para el juego multijugador Serpientes y Escaleras"
     });
     
-    // JWT Authentication in Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         Description = "JWT Authorization header usando el esquema Bearer. Ejemplo: 'Bearer {token}'",
@@ -56,11 +55,7 @@ builder.Services.AddSwaggerGen(c =>
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseSqlServer(
         builder.Configuration.GetConnectionString("DefaultConnection"),
-        sqlOptions => sqlOptions.EnableRetryOnFailure(
-            maxRetryCount: 5,
-            maxRetryDelay: TimeSpan.FromSeconds(30),
-            errorNumbersToAdd: null
-        )
+        sqlOptions => sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(30), null)
     ));
 
 // JWT Authentication
@@ -83,19 +78,17 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
             ClockSkew = TimeSpan.Zero
         };
 
-        // Para SignalR - permite pasar token por query string
+        // Permitir token por query string para SignalR
         options.Events = new JwtBearerEvents
         {
             OnMessageReceived = context =>
             {
                 var accessToken = context.Request.Query["access_token"];
                 var path = context.HttpContext.Request.Path;
-                
-                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs/game"))
                 {
                     context.Token = accessToken;
                 }
-                
                 return Task.CompletedTask;
             }
         };
@@ -155,13 +148,13 @@ builder.Logging.AddDebug();
 
 var app = builder.Build();
 
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "Snakes and Ladders API v1");
+    c.RoutePrefix = string.Empty;
+});
 
-    app.UseSwagger();
-    app.UseSwaggerUI(c =>
-    {
-        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Snakes and Ladders API v1");
-        c.RoutePrefix = string.Empty; // Swagger en la raíz (opcional)
-    });
 app.UseHttpsRedirection();
 
 // IMPORTANTE: El orden importa
@@ -183,20 +176,17 @@ app.MapGet("/health", () => Results.Ok(new
     environment = app.Environment.EnvironmentName
 }));
 
-// Database initialization (opcional - útil para desarrollo)
+// Database initialization (optional)
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
-        
-        // Verificar conexión a la base de datos
         if (context.Database.CanConnect())
         {
             Console.WriteLine("✅ Database connection successful!");
             
-            // Aplicar migraciones pendientes automáticamente (solo en desarrollo)
             if (app.Environment.IsDevelopment())
             {
                 var pendingMigrations = context.Database.GetPendingMigrations();
@@ -210,7 +200,7 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            Console.WriteLine("❌ Cannot connect to database. Please check connection string.");
+            Console.WriteLine("❌ Cannot connect to database. Check connection string.");
         }
     }
     catch (Exception ex)

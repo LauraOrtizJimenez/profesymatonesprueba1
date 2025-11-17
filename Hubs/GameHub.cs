@@ -35,14 +35,14 @@ namespace Proyecto1.Hubs
         {
             var userId = GetUserId();
             var groupName = $"Game_{gameId}";
-            
+
             await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
             _logger.LogInformation($"User {userId} joined game group {groupName}");
-            
+
             // Notificar a otros jugadores
             await Clients.OthersInGroup(groupName).SendAsync("PlayerJoined", userId);
-            
-            // Enviar estado actual del juego
+
+            // Enviar estado actual del juego al jugador que se conecta
             try
             {
                 var gameState = await _gameService.GetGameStateAsync(gameId);
@@ -59,10 +59,10 @@ namespace Proyecto1.Hubs
         {
             var userId = GetUserId();
             var groupName = $"Game_{gameId}";
-            
+
             await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
             _logger.LogInformation($"User {userId} left game group {groupName}");
-            
+
             await Clients.OthersInGroup(groupName).SendAsync("PlayerLeft", userId);
         }
 
@@ -70,22 +70,28 @@ namespace Proyecto1.Hubs
         {
             var userId = GetUserId();
             var groupName = $"Game_{gameId}";
-            
+
             try
             {
                 var moveResult = await _gameService.RollDiceAndMoveAsync(gameId, int.Parse(userId));
-                
+
+                // Si requiere responder al profesor, enviar solo al jugador
+                if (moveResult.RequiresProfesorAnswer && moveResult.ProfesorQuestion != null)
+                {
+                    await Clients.Caller.SendAsync("ReceiveProfesorQuestion", moveResult.ProfesorQuestion);
+                }
+
                 // Enviar resultado del movimiento a todos en el grupo
                 await Clients.Group(groupName).SendAsync("MoveCompleted", new
                 {
                     UserId = userId,
                     MoveResult = moveResult
                 });
-                
+
                 // Enviar estado actualizado del juego
                 var gameState = await _gameService.GetGameStateAsync(gameId);
                 await Clients.Group(groupName).SendAsync("GameStateUpdate", gameState);
-                
+
                 // Si hay ganador, notificar
                 if (moveResult.IsWinner)
                 {
@@ -107,18 +113,18 @@ namespace Proyecto1.Hubs
         {
             var userId = GetUserId();
             var groupName = $"Game_{gameId}";
-            
+
             try
             {
                 await _gameService.SurrenderAsync(gameId, int.Parse(userId));
-                
+
                 // Notificar rendición
                 await Clients.Group(groupName).SendAsync("PlayerSurrendered", userId);
-                
-                // Enviar estado actualizado
+
+                // Enviar estado actualizado del juego
                 var gameState = await _gameService.GetGameStateAsync(gameId);
                 await Clients.Group(groupName).SendAsync("GameStateUpdate", gameState);
-                
+
                 // Verificar si el juego terminó
                 if (gameState.Status == "Finished")
                 {
@@ -153,9 +159,10 @@ namespace Proyecto1.Hubs
 
         private string GetUserId()
         {
-            return Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value 
+            return Context.User?.FindFirst(ClaimTypes.NameIdentifier)?.Value
                 ?? throw new HubException("User not authenticated");
         }
     }
 }
+
  

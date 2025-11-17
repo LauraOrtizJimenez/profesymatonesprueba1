@@ -9,5 +9,7 @@ namespace Proyecto1.DTOs.Moves
         public string? SpecialEvent { get; set; }
         public bool IsWinner { get; set; }
         public string Message { get; set; } = string.Empty;
+        public bool RequiresProfesorAnswer { get; set; } = false;
+        public ProfesorQuestionDto? ProfesorQuestion { get; set; }
     }
 }

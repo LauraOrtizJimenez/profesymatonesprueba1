@@ -1,23 +1,23 @@
 {
   "format": 1,
   "restore": {
-    "C:\\Users\\ernesto\\RiderProjects\\Proyecto1\\Proyecto1\\Proyecto1.csproj": {}
+    "C:\\Users\\laura\\RiderProjects\\ProfesymatonesBackend\\Proyecto1.csproj": {}
   },
   "projects": {
-    "C:\\Users\\ernesto\\RiderProjects\\Proyecto1\\Proyecto1\\Proyecto1.csproj": {
+    "C:\\Users\\laura\\RiderProjects\\ProfesymatonesBackend\\Proyecto1.csproj": {
       "version": "1.0.0",
       "restore": {
-        "projectUniqueName": "C:\\Users\\ernesto\\RiderProjects\\Proyecto1\\Proyecto1\\Proyecto1.csproj",
+        "projectUniqueName": "C:\\Users\\laura\\RiderProjects\\ProfesymatonesBackend\\Proyecto1.csproj",
         "projectName": "Proyecto1",
-        "projectPath": "C:\\Users\\ernesto\\RiderProjects\\Proyecto1\\Proyecto1\\Proyecto1.csproj",
-        "packagesPath": "C:\\Users\\ernesto\\.nuget\\packages\\",
-        "outputPath": "C:\\Users\\ernesto\\RiderProjects\\Proyecto1\\Proyecto1\\obj\\",
+        "projectPath": "C:\\Users\\laura\\RiderProjects\\ProfesymatonesBackend\\Proyecto1.csproj",
+        "packagesPath": "C:\\Users\\laura\\.nuget\\packages\\",
+        "outputPath": "C:\\Users\\laura\\RiderProjects\\ProfesymatonesBackend\\obj\\",
         "projectStyle": "PackageReference",
         "fallbackFolders": [
           "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
         ],
         "configFilePaths": [
-          "C:\\Users\\ernesto\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Users\\laura\\AppData\\Roaming\\NuGet\\NuGet.Config",
           "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config"
         ],
         "originalTargetFrameworks": [
@@ -55,6 +55,10 @@
             "Microsoft.AspNetCore.OpenApi": {
               "target": "Package",
               "version": "[9.0.8, )"
+            },
+            "Microsoft.AspNetCore.SignalR": {
+              "target": "Package",
+              "version": "[1.2.0, )"
             },
             "Microsoft.EntityFrameworkCore": {
               "target": "Package",
