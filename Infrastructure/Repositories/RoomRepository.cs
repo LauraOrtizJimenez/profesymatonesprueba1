@@ -34,6 +34,7 @@ namespace Proyecto1.Infrastructure.Repositories
             return await _context.Rooms
                 .Include(r => r.Players)
                 .ThenInclude(p => p.User)
+                .Include(r => r.Game)
                 .Where(r => r.Status == RoomStatus.Open || r.Status == RoomStatus.Full)
                 .OrderByDescending(r => r.CreatedAt)
                 .ToListAsync();

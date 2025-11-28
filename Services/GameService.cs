@@ -42,9 +42,16 @@ namespace Proyecto1.Services
             if (room == null)
                 throw new InvalidOperationException("Room not found");
 
+            // Get all players in this room (including those with stale GameIds from previous games)
             var playersInRoom = room.Players
-                .Where(p => p.RoomId == roomId && !p.GameId.HasValue)
+                .Where(p => p.RoomId == roomId)
                 .ToList();
+
+            // Reset their GameId to null so they can join the new game
+            foreach (var player in playersInRoom)
+            {
+                player.GameId = null;
+            }
 
             if (playersInRoom.Count < 2)
                 throw new InvalidOperationException($"Need at least 2 players (current: {playersInRoom.Count})");
@@ -57,7 +64,7 @@ namespace Proyecto1.Services
                 CurrentTurnPhase = TurnPhase.WaitingForDice
             };
 
-            await _gameRepository.CreateAsync(game);
+            game = await _gameRepository.CreateAsync(game);
 
             var board = _boardService.GenerateBoard(game.Id);
             game.Board = board;
@@ -72,6 +79,7 @@ namespace Proyecto1.Services
             }
 
             room.Status = RoomStatus.InGame;
+            room.Game = game;  // Set the navigation property so Room.GameId is populated
             await _roomRepository.UpdateAsync(room);
             await _gameRepository.UpdateAsync(game);
 
@@ -121,6 +129,15 @@ namespace Proyecto1.Services
                 WinnerPlayerId = game.WinnerPlayerId,
                 WinnerName = game.Players.FirstOrDefault(p => p.Id == game.WinnerPlayerId)?.User.Username
             };
+        }
+
+        public async Task<GameStateDto?> GetGameByRoomAsync(int roomId)
+        {
+            var game = await _gameRepository.GetByRoomIdAsync(roomId);
+            if (game == null)
+                return null;
+
+            return await GetGameStateAsync(game.Id);
         }
 
         public async Task<MoveResultDto> RollDiceAndMoveAsync(int gameId, int userId)

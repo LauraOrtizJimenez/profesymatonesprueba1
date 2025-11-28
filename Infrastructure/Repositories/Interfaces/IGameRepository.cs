@@ -11,5 +11,6 @@ namespace Proyecto1.Infrastructure.Repositories
         Task<Game> CreateAsync(Game game);
         Task<Game> UpdateAsync(Game game);
         Task<List<Game>> GetGamesByUserIdAsync(int userId);
+        Task<Game?> GetByRoomIdAsync(int roomId);
     }
 }

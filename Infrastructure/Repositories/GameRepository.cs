@@ -56,5 +56,20 @@ namespace Proyecto1.Infrastructure.Repositories
                 .OrderByDescending(g => g.StartedAt)
                 .ToListAsync();
         }
+
+        public async Task<Game?> GetByRoomIdAsync(int roomId)
+        {
+            return await _context.Games
+                .Include(g => g.Board)
+                .ThenInclude(b => b.Snakes)
+                .Include(g => g.Board)
+                .ThenInclude(b => b.Ladders)
+                .Include(g => g.Players)
+                .ThenInclude(p => p.User)
+                .Include(g => g.Moves)
+                .Include(g => g.Room)
+                .OrderByDescending(g => g.StartedAt)
+                .FirstOrDefaultAsync(g => g.RoomId == roomId);
+        }
     }
 }
